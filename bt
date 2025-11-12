@@ -1,0 +1,63 @@
+CREATE TABLE category (
+  category_id   BIGSERIAL PRIMARY KEY,
+  name          VARCHAR(200) NOT NULL UNIQUE,
+  description   TEXT
+);
+
+-- 2) BOOK
+CREATE TABLE book (
+  book_id       BIGSERIAL PRIMARY KEY,
+  title         VARCHAR(300) NOT NULL,
+  publish_year  INT CHECK (publish_year BETWEEN 1400 AND EXTRACT(YEAR FROM CURRENT_DATE)::INT),
+  stock         INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+  category_id   BIGINT NOT NULL REFERENCES category(category_id) ON UPDATE CASCADE ON DELETE RESTRICT
+);
+CREATE INDEX idx_book_category ON book(category_id);
+
+-- 3) AUTHOR
+CREATE TABLE author (
+  author_id     BIGSERIAL PRIMARY KEY,
+  author_name   VARCHAR(200) NOT NULL,
+  bio           TEXT
+);
+
+-- 4) BOOK_AUTHOR (n–n)
+CREATE TABLE book_author (
+  book_id       BIGINT NOT NULL REFERENCES book(book_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  author_id     BIGINT NOT NULL REFERENCES author(author_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  PRIMARY KEY (book_id, author_id)
+);
+CREATE INDEX idx_book_author_author ON book_author(author_id);
+
+-- 5) MEMBER
+CREATE TABLE member (
+  member_id     BIGSERIAL PRIMARY KEY,
+  full_name     VARCHAR(200) NOT NULL,
+  birth_date    DATE,
+  address       TEXT,
+  phone         VARCHAR(30),
+  email         CITEXT UNIQUE,             -- cần extension citext nếu muốn so khớp không phân biệt hoa/thường
+  registered_at DATE NOT NULL DEFAULT CURRENT_DATE,
+  status        VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive','banned'))
+);
+
+-- 6) LOAN (phiếu mượn)
+CREATE TABLE loan (
+  loan_id       BIGSERIAL PRIMARY KEY,
+  member_id     BIGINT NOT NULL REFERENCES member(member_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  loan_date     DATE NOT NULL DEFAULT CURRENT_DATE
+);
+CREATE INDEX idx_loan_member ON loan(member_id);
+
+-- 7) LOAN_ITEM (chi tiết mượn)
+CREATE TABLE loan_item (
+  loan_item_id  BIGSERIAL PRIMARY KEY,
+  loan_id       BIGINT NOT NULL REFERENCES loan(loan_id) ON UPDATE CASCADE ON DELETE CASCADE,
+  book_id       BIGINT NOT NULL REFERENCES book(book_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  quantity      INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  due_date      DATE NOT NULL,
+  return_date   DATE,
+  CONSTRAINT uq_loan_book UNIQUE (loan_id, book_id),
+  CONSTRAINT chk_dates CHECK (due_date >= (SELECT loan_date FROM loan WHERE loan.loan_id = loan_item.loan_id)),
+  CONSTRAINT chk_return_after_due CHECK (return_date IS NULL OR return_date >= (SELECT loan_date FROM loan WHERE loan.loan_id = loan_item.loan_id))
+);
